@@ -4,8 +4,10 @@ import "net/http"
 
 func main() {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(".")))
-	mux.Handle("/assets/", http.FileServer(http.Dir(".")))
+	mux.Handle("/app", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
+	mux.Handle("/app/assets/", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
+	mux.HandleFunc("/healthz", healthzHandler)
+
 	corsMux := middlewareCors(mux)
 
 	httpServer := &http.Server{
@@ -17,7 +19,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(200)
+	w.Write([]byte("OK"))
 }
 
 func middlewareCors(next http.Handler) http.Handler {
