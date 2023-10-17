@@ -31,7 +31,8 @@ func main() {
 	apiRouter := chi.NewRouter()
 	apiRouter.Get("/healthz", healthzHandler)
 	apiRouter.HandleFunc("/reset", apiCfg.resetHandler)
-	apiRouter.Post("/validate_chirp", validateChirpHandler)
+	apiRouter.Get("/chirps", getChirpHandler)
+	apiRouter.Post("/chirps", addChirpHandler)
 	router.Mount("/api", apiRouter)
 
 	corsMux := middlewareCors(router)
