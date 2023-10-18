@@ -14,11 +14,17 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
+	Users  map[int]User  `json:"users"`
 }
 
 type Chirp struct {
 	Id   int
 	Body string
+}
+
+type User struct {
+	Id    int
+	Email string
 }
 
 const filename = "database.json"
@@ -68,6 +74,41 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 		chirps = append(chirps, chirp)
 	}
 	return chirps, nil
+}
+
+func (db *DB) CreateUser(email string) (User, error) {
+	var user User
+	var dbStructure DBStructure
+	users, err := db.GetUsers()
+	if err != nil {
+		return user, err
+	}
+	if len(users) > 0 {
+		user.Id = users[len(users)-1].Id + 1
+	} else {
+		user.Id = 1
+	}
+	user.Email = email
+	users = append(users, user)
+	dbStructure.Users = make(map[int]User, len(users))
+	for i := 0; i < len(users); i++ {
+		dbStructure.Users[i] = users[i]
+	}
+	db.writeDB(dbStructure)
+	return user, nil
+}
+
+// GetChirps returns all chirps in the database
+func (db *DB) GetUsers() ([]User, error) {
+	var users []User
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return users, err
+	}
+	for _, user := range dbStructure.Users {
+		users = append(users, user)
+	}
+	return users, nil
 }
 
 // ensureDB creates a new database file if it doesn't exist

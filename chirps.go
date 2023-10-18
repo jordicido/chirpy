@@ -6,11 +6,14 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func addChirpHandler(w http.ResponseWriter, r *http.Request) {
-	db, err := Database.NewDB(".")
+	db, err := Database.NewDB("")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
 		return
@@ -45,8 +48,8 @@ func addChirpHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, returnVals{Id: chirp.Id, Body: badWordConvertor(chirp.Body)})
 }
 
-func getChirpHandler(w http.ResponseWriter, r *http.Request) {
-	db, err := Database.NewDB(".")
+func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := Database.NewDB("")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
 		return
@@ -77,6 +80,42 @@ func getChirpHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	respondWithJSON(w, http.StatusOK, response)
+}
+
+func getChirpHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := Database.NewDB("")
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
+		return
+	}
+
+	type returnVals struct {
+		Body string `json:"body"`
+		Id   int    `json:"id"`
+	}
+	id := chi.URLParam(r, "chirpID")
+	if err != nil || id == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing chirp id")
+		return
+	}
+	chirps, err := db.GetChirps()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps")
+		return
+
+	}
+	chirpID, err := strconv.Atoi(id)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't convert string to int")
+		return
+	}
+	for _, chirp := range chirps {
+		if chirp.Id == chirpID {
+			respondWithJSON(w, http.StatusOK, returnVals{Body: chirp.Body, Id: chirp.Id})
+			return
+		}
+	}
+	respondWithError(w, http.StatusNotFound, "Chirp not found")
 }
 
 func badWordConvertor(message string) string {
