@@ -2,9 +2,12 @@ package Database
 
 import (
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"sync"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type DB struct {
@@ -23,8 +26,9 @@ type Chirp struct {
 }
 
 type User struct {
-	Id    int
-	Email string
+	Id       int
+	Email    string
+	Password string
 }
 
 const filename = "database.json"
@@ -76,7 +80,7 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return chirps, nil
 }
 
-func (db *DB) CreateUser(email string) (User, error) {
+func (db *DB) CreateUser(email, password string) (User, error) {
 	var user User
 	var dbStructure DBStructure
 	users, err := db.GetUsers()
@@ -88,7 +92,17 @@ func (db *DB) CreateUser(email string) (User, error) {
 	} else {
 		user.Id = 1
 	}
+	for _, user := range users {
+		if user.Email == email {
+			return user, errors.New("User already existing")
+		}
+	}
 	user.Email = email
+	encryptedPass, err := bcrypt.GenerateFromPassword([]byte(password), 0)
+	if err != nil {
+		return user, err
+	}
+	user.Password = string(encryptedPass)
 	users = append(users, user)
 	dbStructure.Users = make(map[int]User, len(users))
 	for i := 0; i < len(users); i++ {

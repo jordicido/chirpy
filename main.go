@@ -37,6 +37,7 @@ func main() {
 	apiRouter.Post("/chirps", addChirpHandler)
 
 	apiRouter.Post("/users", addUserHandler)
+	apiRouter.Post("/login", loginHandler)
 
 	router.Mount("/api", apiRouter)
 
