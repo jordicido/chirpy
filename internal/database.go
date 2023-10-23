@@ -112,7 +112,35 @@ func (db *DB) CreateUser(email, password string) (User, error) {
 	return user, nil
 }
 
-// GetChirps returns all chirps in the database
+func (db *DB) UpdateUser(id int, email, password string) (User, error) {
+	var modUser User
+	var dbStructure DBStructure
+	users, err := db.GetUsers()
+	if err != nil {
+		return modUser, err
+	}
+	for i, user := range users {
+		if user.Id == id {
+			users = append(users[:i], users[i+1:]...)
+			break
+		}
+	}
+	modUser.Id = id
+	modUser.Email = email
+	encryptedPass, err := bcrypt.GenerateFromPassword([]byte(password), 0)
+	if err != nil {
+		return modUser, err
+	}
+	modUser.Password = string(encryptedPass)
+	users = append(users, modUser)
+	dbStructure.Users = make(map[int]User, len(users))
+	for i := 0; i < len(users); i++ {
+		dbStructure.Users[i] = users[i]
+	}
+	db.writeDB(dbStructure)
+	return modUser, nil
+}
+
 func (db *DB) GetUsers() ([]User, error) {
 	var users []User
 	dbStructure, err := db.loadDB()

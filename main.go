@@ -3,40 +3,38 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 )
 
-type apiConfig struct {
-	fileserverHits int
-}
+var ApiConfig *apiConfig = setUpApiConfig(0, os.Getenv("JWT_SECRET"))
 
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
-
-	apiCfg := apiConfig{
-		fileserverHits: 0,
-	}
+	godotenv.Load()
 
 	router := chi.NewRouter()
-	fsHandler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
+	fsHandler := ApiConfig.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
 	router.Handle("/app", fsHandler)
 	router.Handle("/app/*", fsHandler)
 
 	adminRouter := chi.NewRouter()
-	adminRouter.Get("/metrics", apiCfg.metricsHandler)
+	adminRouter.Get("/metrics", ApiConfig.metricsHandler)
 	router.Mount("/admin", adminRouter)
 
 	apiRouter := chi.NewRouter()
 	apiRouter.Get("/healthz", healthzHandler)
-	apiRouter.HandleFunc("/reset", apiCfg.resetHandler)
+	apiRouter.HandleFunc("/reset", ApiConfig.resetHandler)
 
 	apiRouter.Get("/chirps/{chirpID}", getChirpHandler)
 	apiRouter.Get("/chirps", getChirpsHandler)
 	apiRouter.Post("/chirps", addChirpHandler)
 
 	apiRouter.Post("/users", addUserHandler)
+	apiRouter.Put("/users", modifyUserHandler)
 	apiRouter.Post("/login", loginHandler)
 
 	router.Mount("/api", apiRouter)
