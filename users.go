@@ -4,11 +4,8 @@ import (
 	Database "chirpy/internal"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -45,25 +42,6 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, returnVals{Id: user.Id, Email: user.Email})
 }
 
-func verifyToken(stringToken string) (int, int) {
-	token, err := jwt.ParseWithClaims(stringToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ApiConfig.jwtScret), nil
-	})
-	if err != nil {
-		return -1, http.StatusUnauthorized
-	}
-
-	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok && token.Valid {
-		id, err := strconv.Atoi(claims.Subject)
-		if err != nil {
-			return -1, http.StatusInternalServerError
-		}
-		return id, 0
-	} else {
-		return -1, http.StatusUnauthorized
-	}
-}
-
 func modifyUserHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := Database.NewDB("")
 	var user Database.User
@@ -91,7 +69,7 @@ func modifyUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, errorCode := verifyToken(stringToken)
+	id, errorCode := verifyToken("chirpy-access", stringToken)
 	if id == -1 {
 		respondWithError(w, errorCode, "Unauthorized")
 		return
@@ -118,9 +96,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		ExpiresInSeconds *int   `json:"expires_in_seconds"`
 	}
 	type returnVals struct {
-		Id    int    `json:"id"`
-		Email string `json:"email"`
-		Token string `json:"token"`
+		Id           int    `json:"id"`
+		Email        string `json:"email"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -143,26 +122,17 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusUnauthorized, "Unauthorized")
 				return
 			} else {
-				var expiritySeconds time.Time
-				issuedAt := time.Now()
-				if params.ExpiresInSeconds == nil {
-					expiritySeconds = time.Now().AddDate(0, 0, 1)
-				} else {
-					expiritySeconds = time.Now().Add(time.Second * time.Duration(*params.ExpiresInSeconds))
-				}
-				key := []byte(ApiConfig.jwtScret)
-				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-					Issuer:    "chirpy",
-					IssuedAt:  jwt.NewNumericDate(issuedAt),
-					ExpiresAt: jwt.NewNumericDate(expiritySeconds),
-					Subject:   strconv.Itoa(user.Id),
-				})
-				stringToken, err := token.SignedString(key)
+				accessToken, err := createToken(user.Id, 60*60, "chirpy-access")
 				if err != nil {
-					respondWithError(w, http.StatusInternalServerError, "Error creating the JWT")
+					respondWithError(w, http.StatusInternalServerError, "Error creating the access-JWT")
 					return
 				}
-				respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email, Token: stringToken})
+				refreshToken, err := createToken(user.Id, 60*60*24*60, "chirpy-refresh")
+				if err != nil {
+					respondWithError(w, http.StatusInternalServerError, "Error creating the refresh-JWT")
+					return
+				}
+				respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email, Token: accessToken, RefreshToken: refreshToken})
 			}
 		}
 	}

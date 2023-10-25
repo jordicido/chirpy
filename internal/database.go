@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,8 +17,9 @@ type DB struct {
 }
 
 type DBStructure struct {
-	Chirps map[int]Chirp `json:"chirps"`
-	Users  map[int]User  `json:"users"`
+	Chirps      map[int]Chirp      `json:"chirps"`
+	Users       map[int]User       `json:"users"`
+	Revocations map[int]Revocation `json:"revocations"`
 }
 
 type Chirp struct {
@@ -29,6 +31,11 @@ type User struct {
 	Id       int
 	Email    string
 	Password string
+}
+
+type Revocation struct {
+	Token string
+	Time  time.Time
 }
 
 const filename = "database.json"
@@ -151,6 +158,36 @@ func (db *DB) GetUsers() ([]User, error) {
 		users = append(users, user)
 	}
 	return users, nil
+}
+
+func (db *DB) RevokeToken(token string) error {
+	var revocation Revocation
+	var dbStructure DBStructure
+	revocations, err := db.GetRevocations()
+	if err != nil {
+		return err
+	}
+	revocation.Token = token
+	revocation.Time = time.Now()
+	revocations = append(revocations, revocation)
+	dbStructure.Revocations = make(map[int]Revocation, len(revocations))
+	for i := 0; i < len(revocations); i++ {
+		dbStructure.Revocations[i] = revocations[i]
+	}
+	db.writeDB(dbStructure)
+	return nil
+}
+
+func (db *DB) GetRevocations() ([]Revocation, error) {
+	var revocations []Revocation
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return revocations, err
+	}
+	for _, revocation := range dbStructure.Revocations {
+		revocations = append(revocations, revocation)
+	}
+	return revocations, nil
 }
 
 // ensureDB creates a new database file if it doesn't exist

@@ -36,6 +36,8 @@ func main() {
 	apiRouter.Post("/users", addUserHandler)
 	apiRouter.Put("/users", modifyUserHandler)
 	apiRouter.Post("/login", loginHandler)
+	apiRouter.Post("/refresh", refreshTokenHandler)
+	apiRouter.Post("/revoke", revokeTokenHandler)
 
 	router.Mount("/api", apiRouter)
 
