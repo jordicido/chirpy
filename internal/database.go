@@ -23,8 +23,9 @@ type DBStructure struct {
 }
 
 type Chirp struct {
-	Id   int
-	Body string
+	Id       int
+	Body     string
+	AuthorId int
 }
 
 type User struct {
@@ -52,9 +53,12 @@ func NewDB(path string) (*DB, error) {
 }
 
 // CreateChirp creates a new chirp and saves it to disk
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, author int) (Chirp, error) {
 	var chirp Chirp
-	var dbStructure DBStructure
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return chirp, err
+	}
 	chirps, err := db.GetChirps()
 	if err != nil {
 		return chirp, err
@@ -65,13 +69,51 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 		chirp.Id = 1
 	}
 	chirp.Body = body
-	chirps = append(chirps, chirp)
-	dbStructure.Chirps = make(map[int]Chirp, len(chirps))
-	for i := 0; i < len(chirps); i++ {
-		dbStructure.Chirps[i] = chirps[i]
+	chirp.AuthorId = author
+	if len(dbStructure.Chirps) == 0 {
+		dbStructure.Chirps = make(map[int]Chirp)
 	}
+	dbStructure.Chirps[chirp.Id-1] = chirp
 	db.writeDB(dbStructure)
 	return chirp, nil
+}
+
+func (db *DB) DeleteChirp(id, authorId int) error {
+	var chirps []Chirp
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+	for _, chirp := range dbStructure.Chirps {
+		chirps = append(chirps, chirp)
+	}
+	for i, chirp := range chirps {
+		if chirp.Id == id && chirp.AuthorId == authorId {
+			chirps = append(chirps[:i], chirps[i+1:]...)
+			dbStructure.Chirps = make(map[int]Chirp, len(chirps))
+			for i := 0; i < len(chirps); i++ {
+				dbStructure.Chirps[i] = chirps[i]
+			}
+			db.writeDB(dbStructure)
+			return nil
+		}
+	}
+	return errors.New("Chirp not possible to delete")
+}
+
+func (db *DB) GetChirp(id int) (Chirp, error) {
+	var chirp Chirp
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return chirp, err
+	}
+
+	for _, chirp := range dbStructure.Chirps {
+		if chirp.Id == id {
+			return chirp, nil
+		}
+	}
+	return chirp, errors.New("Chirp not found")
 }
 
 // GetChirps returns all chirps in the database
@@ -89,7 +131,10 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 
 func (db *DB) CreateUser(email, password string) (User, error) {
 	var user User
-	var dbStructure DBStructure
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return user, err
+	}
 	users, err := db.GetUsers()
 	if err != nil {
 		return user, err
@@ -110,18 +155,20 @@ func (db *DB) CreateUser(email, password string) (User, error) {
 		return user, err
 	}
 	user.Password = string(encryptedPass)
-	users = append(users, user)
-	dbStructure.Users = make(map[int]User, len(users))
-	for i := 0; i < len(users); i++ {
-		dbStructure.Users[i] = users[i]
+	if len(dbStructure.Users) == 0 {
+		dbStructure.Users = make(map[int]User)
 	}
+	dbStructure.Users[user.Id-1] = user
 	db.writeDB(dbStructure)
 	return user, nil
 }
 
 func (db *DB) UpdateUser(id int, email, password string) (User, error) {
 	var modUser User
-	var dbStructure DBStructure
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return modUser, err
+	}
 	users, err := db.GetUsers()
 	if err != nil {
 		return modUser, err
@@ -162,7 +209,10 @@ func (db *DB) GetUsers() ([]User, error) {
 
 func (db *DB) RevokeToken(token string) error {
 	var revocation Revocation
-	var dbStructure DBStructure
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
 	revocations, err := db.GetRevocations()
 	if err != nil {
 		return err
@@ -170,10 +220,10 @@ func (db *DB) RevokeToken(token string) error {
 	revocation.Token = token
 	revocation.Time = time.Now()
 	revocations = append(revocations, revocation)
-	dbStructure.Revocations = make(map[int]Revocation, len(revocations))
-	for i := 0; i < len(revocations); i++ {
-		dbStructure.Revocations[i] = revocations[i]
+	if len(dbStructure.Revocations) == 0 {
+		dbStructure.Revocations = make(map[int]Revocation)
 	}
+	dbStructure.Revocations[len(revocations)-1] = revocation
 	db.writeDB(dbStructure)
 	return nil
 }

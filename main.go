@@ -32,6 +32,7 @@ func main() {
 	apiRouter.Get("/chirps/{chirpID}", getChirpHandler)
 	apiRouter.Get("/chirps", getChirpsHandler)
 	apiRouter.Post("/chirps", addChirpHandler)
+	apiRouter.Delete("/chirps/{chirpID}", deleteChirpHandler)
 
 	apiRouter.Post("/users", addUserHandler)
 	apiRouter.Put("/users", modifyUserHandler)

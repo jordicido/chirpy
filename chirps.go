@@ -22,8 +22,16 @@ func addChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 	type returnVals struct {
-		Id   int    `json:"id"`
-		Body string `json:"body"`
+		AuthorId int    `json:"author_id"`
+		Id       int    `json:"id"`
+		Body     string `json:"body"`
+	}
+
+	stringToken := strings.TrimPrefix(r.Header.Get("authorization"), "Bearer ")
+
+	id, errorCode := verifyToken("chirpy-access", stringToken)
+	if errorCode != 0 {
+		respondWithError(w, errorCode, "Unauthorized")
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -39,12 +47,12 @@ func addChirpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var chirp Database.Chirp
-	chirp, err = db.CreateChirp(params.Body)
+	chirp, err = db.CreateChirp(params.Body, id)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create chirp")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, returnVals{Id: chirp.Id, Body: badWordConvertor(chirp.Body)})
+	respondWithJSON(w, http.StatusCreated, returnVals{AuthorId: chirp.AuthorId, Body: badWordConvertor(chirp.Body), Id: chirp.Id})
 }
 
 func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +63,9 @@ func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type returnVals []struct {
-		Body string `json:"body"`
-		Id   int    `json:"id"`
+		Body     string `json:"body"`
+		Id       int    `json:"id"`
+		AuthorId int    `json:"author_id"`
 	}
 
 	chirps, err := db.GetChirps()
@@ -71,11 +80,13 @@ func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
 	var response = returnVals{}
 	for _, chirp := range chirps {
 		response = append(response, struct {
-			Body string `json:"body"`
-			Id   int    `json:"id"`
+			Body     string `json:"body"`
+			Id       int    `json:"id"`
+			AuthorId int    `json:"author_id"`
 		}{
-			Body: chirp.Body,
-			Id:   chirp.Id,
+			Body:     chirp.Body,
+			Id:       chirp.Id,
+			AuthorId: chirp.AuthorId,
 		})
 	}
 	respondWithJSON(w, http.StatusOK, response)
@@ -92,29 +103,58 @@ func getChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 		Id   int    `json:"id"`
 	}
-	id := chi.URLParam(r, "chirpID")
-	if err != nil || id == "" {
+	stringId := chi.URLParam(r, "chirpID")
+	if err != nil || stringId == "" {
 		respondWithError(w, http.StatusBadRequest, "Missing chirp id")
 		return
 	}
-	chirps, err := db.GetChirps()
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps")
-		return
 
-	}
-	chirpID, err := strconv.Atoi(id)
+	id, err := strconv.Atoi(stringId)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't convert string to int")
 		return
 	}
-	for _, chirp := range chirps {
-		if chirp.Id == chirpID {
-			respondWithJSON(w, http.StatusOK, returnVals{Body: chirp.Body, Id: chirp.Id})
-			return
-		}
+
+	chirp, err := db.GetChirp(id)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Chirp not found")
+		return
+
 	}
-	respondWithError(w, http.StatusNotFound, "Chirp not found")
+
+	respondWithJSON(w, http.StatusOK, returnVals{Body: chirp.Body, Id: chirp.Id})
+}
+
+func deleteChirpHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := Database.NewDB("")
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
+		return
+	}
+
+	stringChirpId := chi.URLParam(r, "chirpID")
+	if err != nil || stringChirpId == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing chirp id")
+		return
+	}
+	chirpId, err := strconv.Atoi(stringChirpId)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't convert string to int")
+		return
+	}
+
+	stringToken := strings.TrimPrefix(r.Header.Get("authorization"), "Bearer ")
+
+	userId, errorCode := verifyToken("chirpy-access", stringToken)
+	if errorCode != 0 {
+		respondWithError(w, errorCode, "Unauthorized")
+	}
+
+	err = db.DeleteChirp(chirpId, userId)
+	if err != nil {
+		respondWithError(w, http.StatusForbidden, "You can't delete this chirp")
+	}
+	respondWithoutJSON(w, http.StatusOK)
 }
 
 func badWordConvertor(message string) string {
