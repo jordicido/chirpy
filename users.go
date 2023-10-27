@@ -21,8 +21,9 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	type returnVals struct {
-		Id    int    `json:"id"`
-		Email string `json:"email"`
+		Id          int    `json:"id"`
+		Email       string `json:"email"`
+		IsChirpyRed bool   `json:"is_chirpy_red"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -39,7 +40,7 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create chirp")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, returnVals{Id: user.Id, Email: user.Email})
+	respondWithJSON(w, http.StatusCreated, returnVals{Id: user.Id, Email: user.Email, IsChirpyRed: false})
 }
 
 func modifyUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +56,9 @@ func modifyUserHandler(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	type returnVals struct {
-		Id    int    `json:"id"`
-		Email string `json:"email"`
+		Id          int    `json:"id"`
+		Email       string `json:"email"`
+		IsChirpyRed bool   `json:"is_chirpy_red"`
 	}
 
 	stringToken := strings.TrimPrefix(r.Header.Get("authorization"), "Bearer ")
@@ -74,13 +76,13 @@ func modifyUserHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, errorCode, "Unauthorized")
 		return
 	} else {
-		user, err = db.UpdateUser(id, params.Email, params.Password)
+		user, err = db.UpdateUser(id, params.Email, &params.Password, false)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error updating user")
 			return
 		}
 	}
-	respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email})
+	respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email, IsChirpyRed: false})
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +102,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		Email        string `json:"email"`
 		Token        string `json:"token"`
 		RefreshToken string `json:"refresh_token"`
+		IsChirpyRed  bool   `json:"is_chirpy_red"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -132,8 +135,50 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 					respondWithError(w, http.StatusInternalServerError, "Error creating the refresh-JWT")
 					return
 				}
-				respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email, Token: accessToken, RefreshToken: refreshToken})
+				respondWithJSON(w, http.StatusOK, returnVals{Id: user.Id, Email: user.Email, Token: accessToken, RefreshToken: refreshToken, IsChirpyRed: user.IsChirpyRed})
 			}
 		}
 	}
+}
+
+func webhookHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := Database.NewDB("")
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
+		return
+	}
+
+	stringKey := strings.TrimPrefix(r.Header.Get("Authorization"), "ApiKey ")
+	if stringKey != ApiConfig.polkaApiKey {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	type parameters struct {
+		Data struct {
+			UserID int `json:"user_id"`
+		} `json:"data"`
+		Event string `json:"event"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		respondWithoutJSON(w, http.StatusOK)
+		return
+	}
+
+	user, err := db.GetUser(params.Data.UserID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve user")
+		return
+	}
+	db.UpdateUser(user.Id, user.Email, nil, true)
+	respondWithoutJSON(w, http.StatusOK)
 }

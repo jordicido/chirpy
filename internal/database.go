@@ -29,9 +29,10 @@ type Chirp struct {
 }
 
 type User struct {
-	Id       int
-	Email    string
-	Password string
+	Id          int
+	Email       string
+	Password    string
+	IsChirpyRed bool
 }
 
 type Revocation struct {
@@ -150,6 +151,7 @@ func (db *DB) CreateUser(email, password string) (User, error) {
 		}
 	}
 	user.Email = email
+	user.IsChirpyRed = false
 	encryptedPass, err := bcrypt.GenerateFromPassword([]byte(password), 0)
 	if err != nil {
 		return user, err
@@ -163,7 +165,7 @@ func (db *DB) CreateUser(email, password string) (User, error) {
 	return user, nil
 }
 
-func (db *DB) UpdateUser(id int, email, password string) (User, error) {
+func (db *DB) UpdateUser(id int, email string, password *string, isChirpyRed bool) (User, error) {
 	var modUser User
 	dbStructure, err := db.loadDB()
 	if err != nil {
@@ -176,16 +178,21 @@ func (db *DB) UpdateUser(id int, email, password string) (User, error) {
 	for i, user := range users {
 		if user.Id == id {
 			users = append(users[:i], users[i+1:]...)
+			if password != nil {
+				encryptedPass, err := bcrypt.GenerateFromPassword([]byte(*password), 0)
+				if err != nil {
+					return modUser, err
+				}
+				modUser.Password = string(encryptedPass)
+			} else {
+				modUser.Password = user.Password
+			}
 			break
 		}
 	}
 	modUser.Id = id
 	modUser.Email = email
-	encryptedPass, err := bcrypt.GenerateFromPassword([]byte(password), 0)
-	if err != nil {
-		return modUser, err
-	}
-	modUser.Password = string(encryptedPass)
+	modUser.IsChirpyRed = isChirpyRed
 	users = append(users, modUser)
 	dbStructure.Users = make(map[int]User, len(users))
 	for i := 0; i < len(users); i++ {
@@ -193,6 +200,21 @@ func (db *DB) UpdateUser(id int, email, password string) (User, error) {
 	}
 	db.writeDB(dbStructure)
 	return modUser, nil
+}
+
+func (db *DB) GetUser(id int) (User, error) {
+	var user User
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return user, err
+	}
+
+	for _, user := range dbStructure.Users {
+		if user.Id == id {
+			return user, nil
+		}
+	}
+	return user, errors.New("Chirp not found")
 }
 
 func (db *DB) GetUsers() ([]User, error) {

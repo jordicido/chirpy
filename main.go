@@ -9,12 +9,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var ApiConfig *apiConfig = setUpApiConfig(0, os.Getenv("JWT_SECRET"))
+var ApiConfig *apiConfig
 
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
 	godotenv.Load()
+
+	ApiConfig = setUpApiConfig(0, os.Getenv("JWT_SECRET"), os.Getenv("POLKA_API_KEY"))
 
 	router := chi.NewRouter()
 	fsHandler := ApiConfig.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
@@ -39,6 +41,7 @@ func main() {
 	apiRouter.Post("/login", loginHandler)
 	apiRouter.Post("/refresh", refreshTokenHandler)
 	apiRouter.Post("/revoke", revokeTokenHandler)
+	apiRouter.Post("/polka/webhooks", webhookHandler)
 
 	router.Mount("/api", apiRouter)
 
