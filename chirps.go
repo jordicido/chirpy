@@ -32,6 +32,7 @@ func addChirpHandler(w http.ResponseWriter, r *http.Request) {
 	id, errorCode := verifyToken("chirpy-access", stringToken)
 	if errorCode != 0 {
 		respondWithError(w, errorCode, "Unauthorized")
+		return
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -57,10 +58,14 @@ func addChirpHandler(w http.ResponseWriter, r *http.Request) {
 
 func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := Database.NewDB("")
+	var chirps []Database.Chirp
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't open database")
 		return
 	}
+
+	stringAuthorId := r.URL.Query().Get("author_id")
+	sortMethod := r.URL.Query().Get("sort")
 
 	type returnVals []struct {
 		Body     string `json:"body"`
@@ -68,14 +73,30 @@ func getChirpsHandler(w http.ResponseWriter, r *http.Request) {
 		AuthorId int    `json:"author_id"`
 	}
 
-	chirps, err := db.GetChirps()
+	if stringAuthorId != "" {
+		authorId, err := strconv.Atoi(stringAuthorId)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps")
+			return
+		}
+		chirps, err = db.GetChirps(&authorId)
+	} else {
+		chirps, err = db.GetChirps(nil)
+	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps")
+		return
 	}
 
-	sort.Slice(chirps, func(i, j int) bool {
-		return chirps[i].Id < chirps[j].Id
-	})
+	if sortMethod != "" && sortMethod == "desc" {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].Id > chirps[j].Id
+		})
+	} else {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].Id < chirps[j].Id
+		})
+	}
 
 	var response = returnVals{}
 	for _, chirp := range chirps {

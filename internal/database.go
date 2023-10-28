@@ -60,7 +60,7 @@ func (db *DB) CreateChirp(body string, author int) (Chirp, error) {
 	if err != nil {
 		return chirp, err
 	}
-	chirps, err := db.GetChirps()
+	chirps, err := db.GetChirps(nil)
 	if err != nil {
 		return chirp, err
 	}
@@ -118,14 +118,24 @@ func (db *DB) GetChirp(id int) (Chirp, error) {
 }
 
 // GetChirps returns all chirps in the database
-func (db *DB) GetChirps() ([]Chirp, error) {
+func (db *DB) GetChirps(authorId *int) ([]Chirp, error) {
 	var chirps []Chirp
 	dbStructure, err := db.loadDB()
 	if err != nil {
 		return chirps, err
 	}
+
+	sortByAuthor := false
+	if authorId != nil {
+		sortByAuthor = true
+	}
 	for _, chirp := range dbStructure.Chirps {
-		chirps = append(chirps, chirp)
+		if sortByAuthor && *authorId == chirp.AuthorId {
+			chirps = append(chirps, chirp)
+		} else if !sortByAuthor {
+			chirps = append(chirps, chirp)
+		}
+
 	}
 	return chirps, nil
 }
